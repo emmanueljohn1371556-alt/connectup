@@ -31,7 +31,8 @@
   #loading { text-align:center; color:var(--muted); padding:60px 0; }
   #app { display:none; }
   .tabbar { position:fixed; left:0; right:0; bottom:0; display:flex; background:var(--surface); border-top:1px solid var(--border); padding-bottom:env(safe-area-inset-bottom,0px); }
-  .tabbar a { flex:1; text-align:center; padding:14px 0; color:var(--muted); text-decoration:none; font-size:.95rem; }
+  .tabbar a { flex:1; position:relative; text-align:center; padding:14px 0; color:var(--muted); text-decoration:none; font-size:.82rem; }
+  .badge { position:absolute; top:6px; left:calc(50% + 8px); background:var(--danger); color:#fff; border-radius:10px; font-size:.65rem; padding:1px 5px; display:none; }
   .tabbar a.active { color:var(--accent); font-weight:600; }
 </style>
 </head>
@@ -75,6 +76,9 @@
 
 <nav class="tabbar">
   <a href="Feed.html">Feed</a>
+  <a href="Search.html">Search</a>
+  <a href="Messages.html">Chat</a>
+  <a href="Alerts.html">Alerts<span class="badge" id="alertBadge"></span></a>
   <a href="Home.html" class="active">Profile</a>
 </nav>
 
@@ -82,7 +86,7 @@
   import { initializeApp } from "https://www.gstatic.com/firebasejs/13.1.0/firebase-app.js";
   import { getAuth, onAuthStateChanged, signOut, updateProfile }
     from "https://www.gstatic.com/firebasejs/13.1.0/firebase-auth.js";
-  import { initializeFirestore, doc, getDoc, setDoc }
+  import { initializeFirestore, collection, query, where, onSnapshot, doc, getDoc, setDoc }
     from "https://www.gstatic.com/firebasejs/13.1.0/firebase-firestore.js";
 
   const firebaseConfig = {
@@ -99,6 +103,16 @@
   const auth = getAuth(app);
   const db = initializeFirestore(app, { experimentalForceLongPolling: true });
   const $ = (id) => document.getElementById(id);
+
+  function watchBadge(uid) {
+    const q = query(collection(db, "notifications"), where("to", "==", uid), where("read", "==", false));
+    onSnapshot(q, (s) => {
+      const b = document.getElementById("alertBadge");
+      if (!b) return;
+      b.textContent = s.size > 9 ? "9+" : s.size;
+      b.style.display = s.size ? "block" : "none";
+    }, () => {});
+  }
   let currentUser = null;
 
   function profileMessage(text, ok) {
@@ -156,6 +170,7 @@
   onAuthStateChanged(auth, async (user) => {
     if (!user) { window.location.href = "index.html"; return; }
     currentUser = user;
+    watchBadge(user.uid);
 
     state.name = user.displayName || "";
     state.username = localStorage.getItem("username") || "";
