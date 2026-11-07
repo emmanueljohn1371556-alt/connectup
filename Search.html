@@ -4,11 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ConnectUp Search</title>
+<script>try{var t=localStorage.getItem("theme");if(t)document.documentElement.setAttribute("data-theme",t);var a=localStorage.getItem("accent");if(a)document.documentElement.style.setProperty("--accent",a);}catch(e){}</script>
 <style>
   :root { --bg:#0f1624; --surface:#182236; --text:#e8eefb; --muted:#9aaac4; --accent:#6c9bff; --border:#2a3855; --danger:#ff7b7b; }
   @media (prefers-color-scheme: light) {
-    :root { --bg:#f3f6fb; --surface:#fff; --text:#14213d; --muted:#5b6b86; --accent:#2457d6; --border:#dbe3f0; --danger:#c62f2f; }
+    :root:not([data-theme="dark"]) { --bg:#f3f6fb; --surface:#fff; --text:#14213d; --muted:#5b6b86; --accent:#2457d6; --border:#dbe3f0; --danger:#c62f2f; }
   }
+  :root[data-theme="light"] { --bg:#f3f6fb; --surface:#fff; --text:#14213d; --muted:#5b6b86; --accent:#2457d6; --border:#dbe3f0; --danger:#c62f2f; }
+  :root[data-theme="dark"] { --bg:#0f1624; --surface:#182236; --text:#e8eefb; --muted:#9aaac4; --accent:#6c9bff; --border:#2a3855; --danger:#ff7b7b; }
   * { box-sizing: border-box; }
   body { margin:0; padding-bottom:70px; font-family: system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; background:var(--bg); color:var(--text); min-height:100vh; }
   header { display:flex; align-items:center; justify-content:space-between; padding:14px 18px; background:var(--surface); border-bottom:1px solid var(--border); position:sticky; top:0; z-index:5; }
@@ -62,7 +65,8 @@
 
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/13.1.0/firebase-app.js";
-  import { getAuth, onAuthStateChanged }
+  import { getAuth, onAuthStateChanged, updateProfile, signOut, EmailAuthProvider,
+           reauthenticateWithCredential, deleteUser }
     from "https://www.gstatic.com/firebasejs/13.1.0/firebase-auth.js";
   import { initializeFirestore, collection, addDoc, deleteDoc, doc, getDoc, getDocs, setDoc,
            updateDoc, query, where, orderBy, limit, onSnapshot, arrayUnion, arrayRemove }
@@ -109,14 +113,16 @@
     let name = user.displayName || "";
     let username = localStorage.getItem("username") || "";
     let avatar = "";
+    let blocked = [];
     try {
       const s = await getDoc(doc(db, "users", user.uid));
       if (s.exists()) {
         const d = s.data();
         name = d.name || name; username = d.username || username; avatar = d.avatar || "";
+        blocked = d.blocked || [];
       }
     } catch (e) { console.error(e); }
-    return { uid: user.uid, name, username, avatar };
+    return { uid: user.uid, name, username, avatar, blocked, email: user.email };
   }
 
   function notify(me, to, type, postId, text) {
@@ -190,7 +196,7 @@
     try {
       const snap = await getDocs(query(collection(db, "users"), limit(200)));
       users = snap.docs.map((d) => ({ uid: d.id, ...d.data() }))
-        .filter((u) => u.uid !== me.uid && (u.username || u.name));
+        .filter((u) => u.uid !== me.uid && (u.username || u.name) && !me.blocked.includes(u.uid));
     } catch (e) { $("none").textContent = "Could not load users: " + (e.code || e.message); $("none").style.display = "block"; }
     onSnapshot(query(collection(db, "follows"), where("follower", "==", me.uid)), (s) => {
       following = new Set(s.docs.map((d) => d.data().following));

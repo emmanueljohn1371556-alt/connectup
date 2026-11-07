@@ -4,11 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ConnectUp Feed</title>
+<script>try{var t=localStorage.getItem("theme");if(t)document.documentElement.setAttribute("data-theme",t);var a=localStorage.getItem("accent");if(a)document.documentElement.style.setProperty("--accent",a);}catch(e){}</script>
 <style>
   :root { --bg:#0f1624; --surface:#182236; --text:#e8eefb; --muted:#9aaac4; --accent:#6c9bff; --border:#2a3855; --danger:#ff7b7b; }
   @media (prefers-color-scheme: light) {
-    :root { --bg:#f3f6fb; --surface:#fff; --text:#14213d; --muted:#5b6b86; --accent:#2457d6; --border:#dbe3f0; --danger:#c62f2f; }
+    :root:not([data-theme="dark"]) { --bg:#f3f6fb; --surface:#fff; --text:#14213d; --muted:#5b6b86; --accent:#2457d6; --border:#dbe3f0; --danger:#c62f2f; }
   }
+  :root[data-theme="light"] { --bg:#f3f6fb; --surface:#fff; --text:#14213d; --muted:#5b6b86; --accent:#2457d6; --border:#dbe3f0; --danger:#c62f2f; }
+  :root[data-theme="dark"] { --bg:#0f1624; --surface:#182236; --text:#e8eefb; --muted:#9aaac4; --accent:#6c9bff; --border:#2a3855; --danger:#ff7b7b; }
   * { box-sizing: border-box; }
   body { margin:0; padding-bottom:70px; font-family: system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; background:var(--bg); color:var(--text); min-height:100vh; }
   header { display:flex; align-items:center; justify-content:space-between; padding:14px 18px; background:var(--surface); border-bottom:1px solid var(--border); position:sticky; top:0; z-index:5; }
@@ -32,6 +35,7 @@
   .tabbar a.active { color:var(--accent); font-weight:600; }
   .badge { position:absolute; top:6px; left:calc(50% + 8px); background:var(--danger); color:#fff; border-radius:10px; font-size:.65rem; padding:1px 5px; display:none; }
 
+  .postimg { max-width:100%; border-radius:10px; margin-top:10px; display:block; }
   .head { display:flex; gap:10px; align-items:center; margin-bottom:8px; }
   .av { width:38px; height:38px; }
   .row { display:flex; align-items:center; justify-content:space-between; margin-top:10px; }
@@ -55,14 +59,18 @@
 <div id="loading">Loading…</div>
 
 <div id="app">
-  <header><h1>ConnectUp</h1></header>
-  <div id="dbg" style="font-size:.75rem;color:#9aaac4;padding:6px 18px;"></div>
+  <header><h1 style="display:flex;align-items:center;gap:8px"><svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true"><circle cx="8" cy="13" r="6" fill="var(--accent)"/><circle cx="18" cy="13" r="6" fill="none" stroke="var(--accent)" stroke-width="2.5"/></svg>ConnectUp</h1></header>
   <main>
     <div class="card">
       <textarea id="postText" maxlength="280" placeholder="What's on your mind?"></textarea>
+      <img id="preview" class="postimg" alt="" style="display:none">
       <div class="row">
         <span id="count">0 / 280</span>
-        <button id="postBtn">Post</button>
+        <span>
+          <input id="photoFile" type="file" accept="image/*" hidden>
+          <button class="ghost" id="photoBtn" type="button">📷 Photo</button>
+          <button id="postBtn">Post</button>
+        </span>
       </div>
       <div id="status"></div>
     </div>
@@ -85,7 +93,8 @@
 
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/13.1.0/firebase-app.js";
-  import { getAuth, onAuthStateChanged }
+  import { getAuth, onAuthStateChanged, updateProfile, signOut, EmailAuthProvider,
+           reauthenticateWithCredential, deleteUser }
     from "https://www.gstatic.com/firebasejs/13.1.0/firebase-auth.js";
   import { initializeFirestore, collection, addDoc, deleteDoc, doc, getDoc, getDocs, setDoc,
            updateDoc, query, where, orderBy, limit, onSnapshot, arrayUnion, arrayRemove }
@@ -132,14 +141,16 @@
     let name = user.displayName || "";
     let username = localStorage.getItem("username") || "";
     let avatar = "";
+    let blocked = [];
     try {
       const s = await getDoc(doc(db, "users", user.uid));
       if (s.exists()) {
         const d = s.data();
         name = d.name || name; username = d.username || username; avatar = d.avatar || "";
+        blocked = d.blocked || [];
       }
     } catch (e) { console.error(e); }
-    return { uid: user.uid, name, username, avatar };
+    return { uid: user.uid, name, username, avatar, blocked, email: user.email };
   }
 
   function notify(me, to, type, postId, text) {
@@ -159,7 +170,36 @@
     return new Date(ms).toLocaleDateString();
   }
 
-  const dbg = (t) => { const e = $("dbg"); if (e) e.textContent = t; };
+  let pendingImage = "";
+  function fileToImage(file) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => {
+        const scale = Math.min(1, 800 / Math.max(img.width, img.height));
+        const c = document.createElement("canvas");
+        c.width = Math.round(img.width * scale); c.height = Math.round(img.height * scale);
+        c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+        URL.revokeObjectURL(url);
+        let out = c.toDataURL("image/jpeg", 0.7);
+        if (out.length > 350000) out = c.toDataURL("image/jpeg", 0.5);
+        resolve(out);
+      };
+      img.onerror = () => reject(new Error("bad image"));
+      img.src = url;
+    });
+  }
+  $("photoBtn").onclick = () => $("photoFile").click();
+  $("photoFile").onchange = async () => {
+    const f = $("photoFile").files[0];
+    if (!f) return;
+    try {
+      pendingImage = await fileToImage(f);
+      if (pendingImage.length > 450000) { pendingImage = ""; $("status").textContent = "That photo is too large."; return; }
+      $("preview").src = pendingImage;
+      $("preview").style.display = "block";
+    } catch (e) { $("status").textContent = "Could not read that photo."; }
+  };
   let me = null, started = false, mode = "all", followIds = [], postsUnsub = null, gotData = false;
   const openPosts = new Set();
   let commentUnsubs = [];
@@ -196,6 +236,7 @@
       list.innerHTML = "";
       snap.forEach((d) => {
         const c = d.data();
+        if (me.blocked.includes(c.uid)) return;
         const line = document.createElement("div");
         line.className = "comment";
         const b = document.createElement("b");
@@ -270,7 +311,36 @@
       else { cBox = buildComments(id, p.uid); card.appendChild(cBox); openPosts.add(id); }
     };
 
-    card.append(head, text, likeBtn, cBtn);
+    card.append(head, text);
+    if (p.image) {
+      const im = document.createElement("img");
+      im.className = "postimg"; im.src = p.image; im.alt = "Photo";
+      card.appendChild(im);
+    }
+    card.append(likeBtn, cBtn);
+    if (p.uid !== me.uid) {
+      const rep = document.createElement("button");
+      rep.className = "del"; rep.textContent = "Report";
+      rep.onclick = async () => {
+        const reason = prompt("Why are you reporting this post?");
+        if (!reason) return;
+        try {
+          await addDoc(collection(db, "reports"), { reporter: me.uid, postId: id, postUid: p.uid, reason: reason.slice(0, 200), createdAt: Date.now() });
+          alert("Thanks, your report was sent.");
+        } catch (e) { alert("Could not send the report."); }
+      };
+      const blk = document.createElement("button");
+      blk.className = "del"; blk.textContent = "Block";
+      blk.onclick = async () => {
+        if (!confirm("Block " + (p.name || p.username || "this user") + "? You will no longer see their posts.")) return;
+        try {
+          await updateDoc(doc(db, "users", me.uid), { blocked: arrayUnion(p.uid) });
+          me.blocked.push(p.uid);
+          subscribePosts();
+        } catch (e) { alert("Could not block: " + (e.code || e.message)); }
+      };
+      card.append(rep, blk);
+    }
     if (openPosts.has(id)) { cBox = buildComments(id, p.uid); card.appendChild(cBox); }
     return card;
   }
@@ -284,14 +354,12 @@
       const ids = [me.uid, ...followIds].slice(0, 30);
       q = query(collection(db, "posts"), where("uid", "in", ids), limit(100));
     }
-    dbg("Step 2: listening for posts…");
     postsUnsub = onSnapshot(q, (snap) => {
       gotData = true;
-      dbg("Step 3: got " + snap.size + " posts" + (snap.metadata.fromCache ? " (from cache, not live)" : " (live)"));
       $("status").textContent = "";
       commentUnsubs.forEach((u) => u());
       commentUnsubs = [];
-      const docs = snap.docs.map((d) => ({ id: d.id, data: d.data() }));
+      const docs = snap.docs.map((d) => ({ id: d.id, data: d.data() })).filter((d) => !me.blocked.includes(d.data.uid));
       if (mode !== "all") docs.sort((a, b) => (b.data.createdAt || 0) - (a.data.createdAt || 0));
       const feed = $("feed");
       feed.innerHTML = "";
@@ -300,7 +368,6 @@
       empty.textContent = mode === "all" ? "No posts yet. Be the first!" : "No posts yet. Follow people in Search to see their posts here.";
       empty.style.display = docs.length ? "none" : "block";
     }, (err) => {
-      dbg("Error: " + err.code);
       $("status").textContent = "Could not load posts: " + err.code;
     });
   }
@@ -329,7 +396,7 @@
     watchBadge(user.uid);
     $("loading").style.display = "none";
     $("app").style.display = "block";
-    if (!started) { started = true; dbg("Step 1: signed in"); startFeed(); }
+    if (!started) { started = true; startFeed(); }
   });
 
   $("postText").addEventListener("input", () => {
@@ -339,13 +406,16 @@
   $("postBtn").onclick = async () => {
     const text = $("postText").value.trim();
     $("status").textContent = "";
-    if (!text) { $("status").textContent = "Write something first."; return; }
+    if (!text && !pendingImage) { $("status").textContent = "Write something or add a photo first."; return; }
     $("postBtn").disabled = true;
     try {
       await addDoc(collection(db, "posts"), {
         uid: me.uid, name: me.name, username: me.username,
-        avatar: me.avatar || "", text, likedBy: [], createdAt: Date.now()
+        avatar: me.avatar || "", text, image: pendingImage || "", likedBy: [], createdAt: Date.now()
       });
+      pendingImage = "";
+      $("preview").style.display = "none";
+      $("photoFile").value = "";
       $("postText").value = "";
       $("count").textContent = "0 / 280";
     } catch (e) {
