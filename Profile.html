@@ -3,6 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0f1624">
+<link rel="apple-touch-icon" href="connectup-icon-192.png">
+<link rel="icon" href="connectup-icon-192.png">
 <title>ConnectUp Public Profile</title>
 <script>try{var t=localStorage.getItem("theme");if(t)document.documentElement.setAttribute("data-theme",t);var a=localStorage.getItem("accent");if(a)document.documentElement.style.setProperty("--accent",a);}catch(e){}</script>
 <style>
@@ -172,6 +176,10 @@
     $("ptitle").textContent = isMe ? "My profile" : "Profile";
     $("pname").textContent = u.name || u.username || "User";
     $("puser").textContent = u.username ? "@" + u.username : "";
+    try {
+      const pr = await getDoc(doc(db, "premium", uid));
+      if (pr.exists() && (pr.data().until || 0) > Date.now()) $("pname").textContent += " ✓";
+    } catch (e) {}
     $("pbio").textContent = u.bio || "";
     const a = avatarEl(u.avatar, u.name || u.username);
     a.classList.add("big");
@@ -238,6 +246,12 @@
         tx.className = "text"; tx.textContent = p.text || "";
         card.append(t, tx);
         if (p.image) { const im = document.createElement("img"); im.className = "postimg"; im.src = p.image; im.alt = "Photo"; card.appendChild(im); }
+        if (p.videoUrl && /^https:\/\/res\.cloudinary\.com\//.test(p.videoUrl)) {
+          const v = document.createElement("video");
+          v.src = p.videoUrl; v.controls = true; v.playsInline = true; v.preload = "metadata";
+          v.className = "postimg"; v.style.width = "100%"; v.style.background = "#000";
+          card.appendChild(v);
+        }
         const l = document.createElement("div");
         l.className = "muted"; l.style.marginTop = "8px"; l.textContent = "♥ " + (p.likedBy || []).length;
         card.appendChild(l);
@@ -258,5 +272,6 @@
   });
 </script>
 
+<script type="module" src="consent.js"></script>
 </body>
 </html>

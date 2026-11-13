@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0f1624">
+<link rel="apple-touch-icon" href="connectup-icon-192.png">
+<link rel="icon" href="connectup-icon-192.png">
+<title>Advertise on ConnectUp</title>
+<script>try{var t=localStorage.getItem("theme");if(t)document.documentElement.setAttribute("data-theme",t);var a=localStorage.getItem("accent");if(a)document.documentElement.style.setProperty("--accent",a);}catch(e){}</script>
+<style>
+  :root { --bg:#0f1624; --surface:#182236; --text:#e8eefb; --muted:#9aaac4; --accent:#6c9bff; --border:#2a3855; }
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) { --bg:#f3f6fb; --surface:#fff; --text:#14213d; --muted:#5b6b86; --accent:#2457d6; --border:#dbe3f0; }
+  }
+  :root[data-theme="light"] { --bg:#f3f6fb; --surface:#fff; --text:#14213d; --muted:#5b6b86; --accent:#2457d6; --border:#dbe3f0; }
+  :root[data-theme="dark"] { --bg:#0f1624; --surface:#182236; --text:#e8eefb; --muted:#9aaac4; --accent:#6c9bff; --border:#2a3855; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; background:var(--bg); color:var(--text); line-height:1.6; }
+  header { padding:14px 18px; background:var(--surface); border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; }
+  header h1 { font-size:1.1rem; margin:0; }
+  header a { color:var(--accent); text-decoration:none; font-size:.95rem; }
+  main { max-width:720px; margin:0 auto; padding:20px 18px 60px; }
+  h2 { font-size:1.15rem; margin:28px 0 6px; }
+  .muted { color:var(--muted); font-size:.9rem; }
+  ul { padding-left:20px; }
+  li { margin:4px 0; }
+  .box { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:14px 16px; margin:14px 0; }
+  .price { font-size:1.4rem; font-weight:700; color:var(--accent); }
+  a { color:var(--accent); }
+  .cta { display:inline-block; background:var(--accent); color:#fff; text-decoration:none; padding:11px 20px; border-radius:10px; margin-top:8px; }
+  a:focus-visible { outline:3px solid var(--accent); outline-offset:2px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>ConnectUp</h1>
+  <a href="index.html">← Back to the app</a>
+</header>
+<main>
+  <h1 style="margin:0 0 4px">Advertise on ConnectUp</h1>
+  <p class="muted">Reach people in your community, right where they read and share.</p>
+
+  <p>ConnectUp is a social app for sharing posts, photos, videos and stories, following friends, joining groups and chatting. Your business can appear inside the feed, clearly marked as sponsored.</p>
+
+  <h2>Our audience</h2>
+  <div class="box">
+    <b>[NUMBER] active users</b> and growing. Mostly <b>[DESCRIBE YOUR AUDIENCE, e.g. students and young adults in YOUR CITY]</b>.<br>
+    <span class="muted">Numbers are updated from our own analytics. Ask us for the latest figures.</span>
+  </div>
+
+  <h2>What you get</h2>
+  <ul>
+    <li>A <b>Sponsored</b> card in everyone’s feed, shown after every few posts.</li>
+    <li>Your business name, a short message of up to 200 characters, a picture and a <b>Learn more</b> button that opens your website, WhatsApp or page.</li>
+    <li>A simple <b>report of how many people tapped</b> your ad when the campaign ends.</li>
+    <li>Honest labelling: every ad says “Sponsored”, so people trust the feed and your brand.</li>
+  </ul>
+
+  <h2>Pricing</h2>
+  <div class="box">
+    <div class="price">[YOUR PRICE] per week</div>
+    <div class="muted">Discounts for 4 weeks or more. Introductory offer for the first advertisers.</div>
+  </div>
+
+  <h2>How it works</h2>
+  <ul>
+    <li><b>1. Send us your details:</b> your business name, your message, your picture and the link you want people to open.</li>
+    <li><b>2. Pay:</b> by bank transfer or the payment link we send you.</li>
+    <li><b>3. Go live:</b> your ad starts within 24 hours of payment.</li>
+    <li><b>4. Get your report:</b> we send you the tap count at the end of your campaign.</li>
+  </ul>
+
+  <h2>Ad rules</h2>
+  <p>We accept ads for legitimate local businesses, events, schools, services and products. We do not accept ads for scams, adult content, gambling, weapons, illegal products, misleading offers or anything that breaks the law. We may refuse or remove any ad at any time. See our <a href="Terms.html">Terms</a> for details.</p>
+
+  <h2>Book your spot</h2>
+  <div class="box">
+    Email <b>[YOUR EMAIL ADDRESS]</b> with the subject “ConnectUp ad” and tell us about your business.<br>
+    <a class="cta" href="mailto:[YOUR EMAIL ADDRESS]?subject=ConnectUp%20ad">Email us</a>
+  </div>
+</main>
+<script type="module" src="consent.js"></script>
+</body>
+</html>

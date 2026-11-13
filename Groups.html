@@ -3,6 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0f1624">
+<link rel="apple-touch-icon" href="connectup-icon-192.png">
+<link rel="icon" href="connectup-icon-192.png">
 <title>ConnectUp Groups</title>
 <script>try{var t=localStorage.getItem("theme");if(t)document.documentElement.setAttribute("data-theme",t);var a=localStorage.getItem("accent");if(a)document.documentElement.style.setProperty("--accent",a);}catch(e){}</script>
 <style>
@@ -243,11 +247,28 @@
       if (u.uid === current.ownerUid) { const t = document.createElement("span"); t.className = "tag"; t.textContent = "Owner"; a.appendChild(t); }
       else if ((current.admins || []).includes(u.uid)) { const t = document.createElement("span"); t.className = "tag"; t.textContent = "Admin"; a.appendChild(t); }
       row.append(avatarEl(u.avatar, u.name), a);
-      if (current.ownerUid === me.uid && u.uid !== me.uid && !(current.admins || []).includes(u.uid)) {
+      const targetIsAdmin = (current.admins || []).includes(u.uid);
+      const iAmOwner = current.ownerUid === me.uid;
+      if (iAmOwner && u.uid !== me.uid) {
         const b = document.createElement("button");
-        b.className = "ghost"; b.style.padding = "4px 10px"; b.textContent = "Make admin";
-        b.onclick = async () => { try { await updateDoc(doc(db, "groups", current.id), { admins: arrayUnion(u.uid) }); } catch (e) { alert("Could not update."); } };
+        b.className = "ghost"; b.style.padding = "4px 10px"; b.textContent = targetIsAdmin ? "Remove admin" : "Make admin";
+        b.onclick = async () => {
+          try { await updateDoc(doc(db, "groups", current.id), { admins: targetIsAdmin ? arrayRemove(u.uid) : arrayUnion(u.uid) }); }
+          catch (e) { alert("Could not update: " + (e.code || e.message)); }
+        };
         row.appendChild(b);
+      }
+      if (isAdminHere() && u.uid !== me.uid && u.uid !== current.ownerUid && (iAmOwner || !targetIsAdmin)) {
+        const k = document.createElement("button");
+        k.className = "ghost"; k.style.cssText = "padding:4px 10px;color:var(--danger);border-color:var(--danger)"; k.textContent = "Remove";
+        k.onclick = async () => {
+          if (!confirm("Remove " + u.name + " from the group? They will not be able to rejoin.")) return;
+          const data = { members: arrayRemove(u.uid), removed: arrayUnion(u.uid) };
+          if (targetIsAdmin) data.admins = arrayRemove(u.uid);
+          try { await updateDoc(doc(db, "groups", current.id), data); }
+          catch (e) { alert("Could not remove: " + (e.code || e.message)); }
+        };
+        row.appendChild(k);
       }
       box.appendChild(row);
     });
@@ -257,11 +278,15 @@
     $("gtitle").textContent = "Group";
     $("gname").textContent = current.name;
     $("gdesc").textContent = current.description || "";
-    $("gcount").textContent = (current.members || []).length + " members · created by " + (current.ownerName || "someone");
+    $("gcount").textContent = (current.members || []).length + " members · " + (current.admins || []).length + " admin(s) · created by " + (current.ownerName || "someone") + (isAdminHere() ? " · you are an admin" : "");
     const member = (current.members || []).includes(me.uid);
     const btns = $("gbtns");
     btns.innerHTML = "";
-    if (!member) {
+    if (!member && (current.removed || []).includes(me.uid)) {
+      const r = document.createElement("div");
+      r.className = "muted"; r.textContent = "You were removed from this group by an admin.";
+      btns.appendChild(r);
+    } else if (!member) {
       const j = document.createElement("button");
       j.textContent = "Join group";
       j.onclick = async () => { try { await updateDoc(doc(db, "groups", current.id), { members: arrayUnion(me.uid) }); } catch (e) { alert("Could not join: " + (e.code || e.message)); } };
@@ -271,6 +296,20 @@
       l.className = "ghost"; l.textContent = "Leave group";
       l.onclick = async () => { if (!confirm("Leave this group?")) return; try { await updateDoc(doc(db, "groups", current.id), { members: arrayRemove(me.uid) }); } catch (e) { alert("Could not leave."); } };
       btns.appendChild(l);
+    }
+    if (isAdminHere()) {
+      const ed = document.createElement("button");
+      ed.className = "ghost"; ed.textContent = "Edit group info";
+      ed.onclick = async () => {
+        const name = prompt("Group name (3-40 characters):", current.name);
+        if (name === null) return;
+        if (name.trim().length < 3 || name.trim().length > 40) { alert("The name needs 3-40 characters."); return; }
+        const description = prompt("Description (max 140 characters):", current.description || "");
+        if (description === null) return;
+        try { await updateDoc(doc(db, "groups", current.id), { name: name.trim(), description: description.trim().slice(0, 140) }); }
+        catch (e) { alert("Could not save: " + (e.code || e.message)); }
+      };
+      btns.appendChild(ed);
     }
     if (current.ownerUid === me.uid) {
       const d = document.createElement("button");
@@ -289,7 +328,8 @@
   function renderPosts() {
     const box = $("gposts");
     box.innerHTML = "";
-    const list = gposts.filter((p) => !me.blocked.includes(p.uid));
+    const list = gposts.filter((p) => !me.blocked.includes(p.uid))
+      .sort((a, b) => (b.id === current.pinned) - (a.id === current.pinned));
     list.forEach((p) => {
       const card = document.createElement("div");
       card.className = "card post";
@@ -302,8 +342,15 @@
       a.style.cssText = "color:inherit;text-decoration:none"; a.textContent = p.name || p.username || "User";
       const tm = document.createElement("div");
       tm.className = "time"; tm.textContent = timeAgo(p.createdAt);
+      if (p.id === current.pinned) { const pt = document.createElement("span"); pt.className = "tag"; pt.textContent = "📌 Pinned"; a.appendChild(pt); }
       who.append(a, tm);
       head.append(avatarEl(p.avatar, p.name || p.username), who);
+      if (isAdminHere()) {
+        const pin = document.createElement("button");
+        pin.className = "del"; pin.style.color = "var(--muted)"; pin.textContent = p.id === current.pinned ? "Unpin" : "Pin";
+        pin.onclick = async () => { try { await updateDoc(doc(db, "groups", current.id), { pinned: p.id === current.pinned ? "" : p.id }); } catch (e) { alert("Could not pin."); } };
+        head.appendChild(pin);
+      }
       if (p.uid === me.uid || isAdminHere()) {
         const x = document.createElement("button");
         x.className = "del"; x.textContent = "Delete";
@@ -343,21 +390,4 @@
       $("listView").style.display = "none";
       $("groupView").style.display = "block";
       onSnapshot(doc(db, "groups", gid), (s) => {
-        if (!s.exists()) { $("gname").textContent = "Group not found"; $("gdesc").textContent = ""; return; }
-        current = { id: s.id, ...s.data() };
-        renderGroup();
-      }, (err) => { $("gname").textContent = "Could not load group: " + err.code; });
-      onSnapshot(query(collection(db, "groups", gid, "posts"), orderBy("createdAt", "desc"), limit(50)), (s) => {
-        gposts = s.docs.map((d) => ({ id: d.id, ...d.data() }));
-        if (current) renderPosts();
-      }, () => {});
-    } else {
-      onSnapshot(query(collection(db, "groups"), limit(100)), (s) => {
-        renderList(s.docs.map((d) => ({ id: d.id, ...d.data() })));
-      }, (err) => { $("gnone").textContent = "Could not load groups: " + err.code; $("gnone").style.display = "block"; });
-    }
-  });
-</script>
-
-</body>
-</html>
+        if (!s.exists()) { $("gname").textContent = "Group not found"; $(

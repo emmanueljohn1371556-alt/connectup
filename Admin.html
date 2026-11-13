@@ -3,6 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0f1624">
+<link rel="apple-touch-icon" href="connectup-icon-192.png">
+<link rel="icon" href="connectup-icon-192.png">
 <title>ConnectUp Admin</title>
 <script>try{var t=localStorage.getItem("theme");if(t)document.documentElement.setAttribute("data-theme",t);var a=localStorage.getItem("accent");if(a)document.documentElement.style.setProperty("--accent",a);}catch(e){}</script>
 <style>
@@ -53,6 +57,27 @@
       <h3>Reports</h3>
       <div id="reports"></div>
       <div id="rnone" class="emptymsg" style="display:none">No open reports.</div>
+      <h3>Sponsored posts</h3>
+      <div class="card">
+        <input id="adBrand" class="cinput" maxlength="60" placeholder="Advertiser name">
+        <textarea id="adText" class="cinput" maxlength="200" rows="3" placeholder="Ad text (max 200 characters)" style="margin-top:8px"></textarea>
+        <input id="adLink" class="cinput" placeholder="Link (https://...)" style="margin-top:8px">
+        <input id="adFile" type="file" accept="image/*" hidden>
+        <img id="adPrev" alt="" style="display:none;max-width:100%;border-radius:10px;margin-top:8px">
+        <div class="row3"><button class="ghost" id="adImgBtn">Add image</button><button id="adSaveBtn">Publish ad</button></div>
+        <p class="muted small" id="adMsg"></p>
+      </div>
+      <div id="adsList"></div>
+      <h3>Verified members</h3>
+      <div class="card">
+        <input id="vUser" class="cinput" placeholder="Username (or user ID)">
+        <select id="vDays" class="cinput" style="margin-top:8px">
+          <option value="30">30 days</option><option value="90">90 days</option><option value="365">1 year</option>
+        </select>
+        <button id="vBtn" style="margin-top:10px">Grant verified badge</button>
+        <p class="muted small" id="vMsg"></p>
+      </div>
+      <div id="vList"></div>
       <h3>Banned users</h3>
       <div class="card">
         <input id="banUid" class="cinput" placeholder="User ID to ban">
@@ -235,6 +260,128 @@
     catch (e) { $("banMsg").textContent = "Failed: " + (e.code || e.message); }
   };
 
+  // ---------- Sponsored posts ----------
+  let adImage = "";
+  function compressImg(file) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => {
+        const sc = Math.min(1, 800 / Math.max(img.width, img.height));
+        const c = document.createElement("canvas");
+        c.width = Math.round(img.width * sc); c.height = Math.round(img.height * sc);
+        c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+        URL.revokeObjectURL(url);
+        resolve(c.toDataURL("image/jpeg", 0.7));
+      };
+      img.onerror = () => reject(new Error("bad image"));
+      img.src = url;
+    });
+  }
+  $("adImgBtn").onclick = () => $("adFile").click();
+  $("adFile").onchange = async () => {
+    const f = $("adFile").files[0];
+    if (!f) return;
+    try {
+      const d = await compressImg(f);
+      if (d.length > 450000) { $("adMsg").textContent = "That image is too large."; return; }
+      adImage = d;
+      $("adPrev").src = d; $("adPrev").style.display = "block";
+    } catch (e) { $("adMsg").textContent = "Could not read that image."; }
+  };
+  $("adSaveBtn").onclick = async () => {
+    const brand = $("adBrand").value.trim();
+    const text = $("adText").value.trim();
+    const link = $("adLink").value.trim();
+    if (!brand || !text) { $("adMsg").textContent = "Add the advertiser name and the ad text."; return; }
+    if (link && !/^https:\/\//i.test(link)) { $("adMsg").textContent = "The link must start with https://"; return; }
+    try {
+      await addDoc(collection(db, "sponsored"), { brand, text, link, image: adImage, active: true, createdAt: Date.now(), by: me.uid });
+      $("adBrand").value = ""; $("adText").value = ""; $("adLink").value = "";
+      adImage = ""; $("adPrev").style.display = "none";
+      $("adMsg").textContent = "Ad published. It appears after every 5th post in the feed.";
+    } catch (e) { $("adMsg").textContent = "Failed: " + (e.code || e.message); }
+  };
+
+  async function renderAdsList(docs) {
+    const rows = await Promise.all(docs.map(async (d) => {
+      let clicks = 0;
+      try { clicks = (await getDocs(query(collection(db, "adClicks"), where("adId", "==", d.id), limit(1000)))).size; } catch (e) {}
+      return { id: d.id, ...d.data(), clicks };
+    }));
+    rows.sort((x, y) => y.createdAt - x.createdAt);
+    const box = $("adsList");
+    box.innerHTML = "";
+    rows.forEach((ad) => {
+      const card = document.createElement("div");
+      card.className = "card";
+      const t = document.createElement("div");
+      t.style.fontWeight = "600"; t.textContent = ad.brand + (ad.active ? "" : "  (paused)");
+      const x = document.createElement("div");
+      x.className = "quote"; x.textContent = ad.text;
+      const st = document.createElement("div");
+      st.className = "muted small"; st.textContent = ad.clicks + " clicks · " + timeAgo(ad.createdAt);
+      const btns = document.createElement("div");
+      btns.className = "row3";
+      const pb = document.createElement("button");
+      pb.className = "ghost"; pb.textContent = ad.active ? "Pause" : "Activate";
+      pb.onclick = async () => { try { await updateDoc(doc(db, "sponsored", ad.id), { active: !ad.active }); } catch (e) { alert("Failed."); } };
+      const db2 = document.createElement("button");
+      db2.className = "dangerbtn"; db2.textContent = "Delete";
+      db2.onclick = async () => { if (!confirm("Delete this ad?")) return; try { await deleteDoc(doc(db, "sponsored", ad.id)); } catch (e) { alert("Failed."); } };
+      btns.append(pb, db2);
+      card.append(t, x, st, btns);
+      box.appendChild(card);
+    });
+  }
+  function watchAds() {
+    onSnapshot(query(collection(db, "sponsored"), limit(50)), (s) => renderAdsList(s.docs), () => {});
+  }
+
+  // ---------- Verified members ----------
+  async function resolveUid(input) {
+    const v = input.trim();
+    if (!v) return "";
+    try { const u = await getDoc(doc(db, "usernames", v.toLowerCase())); if (u.exists()) return u.data().uid; } catch (e) {}
+    return v;
+  }
+  $("vBtn").onclick = async () => {
+    const uid = await resolveUid($("vUser").value);
+    if (!uid) { $("vMsg").textContent = "Enter a username or user ID."; return; }
+    try {
+      const u = await getDoc(doc(db, "users", uid));
+      if (!u.exists()) { $("vMsg").textContent = "User not found."; return; }
+      let start = Date.now();
+      const ex = await getDoc(doc(db, "premium", uid));
+      if (ex.exists() && (ex.data().until || 0) > start) start = ex.data().until;
+      const until = start + Number($("vDays").value) * 86400000;
+      await setDoc(doc(db, "premium", uid), { until, by: me.uid, createdAt: Date.now() });
+      $("vMsg").textContent = "Verified until " + new Date(until).toLocaleDateString() + ".";
+      $("vUser").value = "";
+    } catch (e) { $("vMsg").textContent = "Failed: " + (e.code || e.message); }
+  };
+  function watchVerified() {
+    onSnapshot(query(collection(db, "premium"), limit(200)), async (s) => {
+      const rows = await Promise.all(s.docs.map(async (d) => ({ id: d.id, until: d.data().until || 0, name: await getUser(d.id) })));
+      rows.sort((a, b) => b.until - a.until);
+      const box = $("vList");
+      box.innerHTML = "";
+      rows.forEach((r) => {
+        const card = document.createElement("div");
+        card.className = "card";
+        const t = document.createElement("div");
+        t.textContent = r.name + (r.until > Date.now() ? "" : "  (expired)");
+        const w = document.createElement("div");
+        w.className = "muted small"; w.textContent = "Until " + new Date(r.until).toLocaleDateString();
+        const rm = document.createElement("button");
+        rm.className = "ghost"; rm.style.marginTop = "8px"; rm.textContent = "Remove";
+        rm.onclick = async () => { try { await deleteDoc(doc(db, "premium", r.id)); } catch (e) { alert("Failed."); } };
+        card.append(t, w, rm);
+        box.appendChild(card);
+      });
+    }, () => {});
+  }
+
   onAuthStateChanged(auth, async (user) => {
     if (!user) { window.location.href = "index.html"; return; }
     me = await loadMe(user);
@@ -245,10 +392,13 @@
     try { admin = (await getDoc(doc(db, "admins", me.uid))).exists(); } catch (e) {}
     if (!admin) { $("denied").style.display = "block"; return; }
     $("adminArea").style.display = "block";
+    watchAds();
+    watchVerified();
     onSnapshot(query(collection(db, "reports"), limit(100)), (s) => renderReports(s.docs), () => {});
     onSnapshot(query(collection(db, "banned"), limit(100)), (s) => renderBanned(s.docs), () => {});
   });
 </script>
 
+<script type="module" src="consent.js"></script>
 </body>
 </html>
