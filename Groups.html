@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link rel="manifest" href="manifest.webmanifest">
+<link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#0f1624">
 <link rel="apple-touch-icon" href="connectup-icon-192.png">
 <link rel="icon" href="connectup-icon-192.png">
@@ -390,4 +390,22 @@
       $("listView").style.display = "none";
       $("groupView").style.display = "block";
       onSnapshot(doc(db, "groups", gid), (s) => {
-        if (!s.exists()) { $("gname").textContent = "Group not found"; $(
+        if (!s.exists()) { $("gname").textContent = "Group not found"; $("gdesc").textContent = ""; return; }
+        current = { id: s.id, ...s.data() };
+        renderGroup();
+      }, (err) => { $("gname").textContent = "Could not load group: " + err.code; });
+      onSnapshot(query(collection(db, "groups", gid, "posts"), orderBy("createdAt", "desc"), limit(50)), (s) => {
+        gposts = s.docs.map((d) => ({ id: d.id, ...d.data() }));
+        if (current) renderPosts();
+      }, () => {});
+    } else {
+      onSnapshot(query(collection(db, "groups"), limit(100)), (s) => {
+        renderList(s.docs.map((d) => ({ id: d.id, ...d.data() })));
+      }, (err) => { $("gnone").textContent = "Could not load groups: " + err.code; $("gnone").style.display = "block"; });
+    }
+  });
+</script>
+
+<script type="module" src="consent.js"></script>
+</body>
+</html>
