@@ -4,8 +4,8 @@ import { auth, db, $, watchBadge, avatarEl, loadMe, notify, timeAgo, onAuthState
 import { initStories } from "./stories.js";
 
   // Video uploads use a free Cloudinary account (see setup steps)
-  const CLOUD_NAME = "uvqtjbds";
-  const UPLOAD_PRESET = "User_upload";
+  const CLOUD_NAME = "YOUR_CLOUD_NAME";
+  const UPLOAD_PRESET = "YOUR_UPLOAD_PRESET";
   let pendingVideo = "", pendingVideoUrl = "", uploading = false;
   function parseVideo(u) {
     u = (u || "").trim();
@@ -186,6 +186,12 @@ import { initStories } from "./stories.js";
     author.style.cssText = "color:inherit;text-decoration:none";
     author.className = "author";
     author.textContent = p.name || p.username || "User";
+    if (premiumSet.has(p.uid)) {
+      const vb = document.createElement("span");
+      vb.textContent = " ✓"; vb.title = "Verified";
+      vb.style.cssText = "color:var(--accent);font-weight:700";
+      author.appendChild(vb);
+    }
     const handle = document.createElement("span");
     handle.className = "handle";
     handle.textContent = p.username ? "  @" + p.username : "";
@@ -281,6 +287,50 @@ import { initStories } from "./stories.js";
     return card;
   }
 
+  let lastDocs = [], ads = [], premiumSet = new Set();
+
+  function renderAd(ad) {
+    const card = document.createElement("div");
+    card.className = "card";
+    const tag = document.createElement("div");
+    tag.style.cssText = "font-size:.72rem;border:1px solid var(--border);border-radius:10px;padding:1px 8px;color:var(--muted);display:inline-block;margin-bottom:8px";
+    tag.textContent = "Sponsored";
+    const brand = document.createElement("div");
+    brand.className = "author"; brand.textContent = ad.brand || "Advertiser";
+    const text = document.createElement("div");
+    text.className = "text"; text.style.marginTop = "6px"; text.textContent = ad.text || "";
+    card.append(tag, brand, text);
+    if (ad.image) {
+      const im = document.createElement("img");
+      im.className = "postimg"; im.src = ad.image; im.alt = "";
+      card.appendChild(im);
+    }
+    if (ad.link && /^https:\/\//i.test(ad.link)) {
+      const a = document.createElement("a");
+      a.href = ad.link; a.target = "_blank"; a.rel = "noopener noreferrer sponsored";
+      a.textContent = "Learn more";
+      a.style.cssText = "display:inline-block;margin-top:10px;border:1px solid var(--accent);color:var(--accent);border-radius:8px;padding:8px 16px;text-decoration:none";
+      a.onclick = () => { addDoc(collection(db, "adClicks"), { adId: ad.id, uid: me.uid, createdAt: Date.now() }).catch(() => {}); };
+      card.appendChild(a);
+    }
+    return card;
+  }
+
+  function renderFeed() {
+    commentUnsubs.forEach((u) => u());
+    commentUnsubs = [];
+    const feed = $("feed");
+    feed.innerHTML = "";
+    let adIdx = 0;
+    lastDocs.slice(0, 50).forEach((d, i) => {
+      feed.appendChild(renderPost(d.id, d.data));
+      if (ads.length && (i + 1) % 5 === 0) { feed.appendChild(renderAd(ads[adIdx % ads.length])); adIdx++; }
+    });
+    const empty = $("empty");
+    empty.textContent = mode === "all" ? "No posts yet. Be the first!" : "No posts yet. Follow people in Search to see their posts here.";
+    empty.style.display = lastDocs.length ? "none" : "block";
+  }
+
   function subscribePosts() {
     if (postsUnsub) postsUnsub();
     let q;
@@ -293,16 +343,10 @@ import { initStories } from "./stories.js";
     postsUnsub = onSnapshot(q, (snap) => {
       gotData = true;
       $("status").textContent = "";
-      commentUnsubs.forEach((u) => u());
-      commentUnsubs = [];
       const docs = snap.docs.map((d) => ({ id: d.id, data: d.data() })).filter((d) => !me.blocked.includes(d.data.uid));
       if (mode !== "all") docs.sort((a, b) => (b.data.createdAt || 0) - (a.data.createdAt || 0));
-      const feed = $("feed");
-      feed.innerHTML = "";
-      docs.slice(0, 50).forEach((d) => feed.appendChild(renderPost(d.id, d.data)));
-      const empty = $("empty");
-      empty.textContent = mode === "all" ? "No posts yet. Be the first!" : "No posts yet. Follow people in Search to see their posts here.";
-      empty.style.display = docs.length ? "none" : "block";
+      lastDocs = docs;
+      renderFeed();
     }, (err) => {
       $("status").textContent = "Could not load posts: " + err.code;
     });
@@ -313,6 +357,14 @@ import { initStories } from "./stories.js";
     onSnapshot(query(collection(db, "follows"), where("follower", "==", me.uid)), (s) => {
       followIds = s.docs.map((d) => d.data().following);
       if (mode === "following") subscribePosts();
+    }, () => {});
+    onSnapshot(collection(db, "premium"), (sn) => {
+      premiumSet = new Set(sn.docs.filter((d) => (d.data().until || 0) > Date.now()).map((d) => d.id));
+      if (lastDocs.length) renderFeed();
+    }, () => {});
+    onSnapshot(query(collection(db, "sponsored"), where("active", "==", true), limit(20)), (sn) => {
+      ads = sn.docs.map((d) => ({ id: d.id, ...d.data() }));
+      if (lastDocs.length) renderFeed();
     }, () => {});
     subscribePosts();
   }
