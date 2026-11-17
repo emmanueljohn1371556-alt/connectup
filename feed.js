@@ -4,7 +4,7 @@ import { auth, db, $, watchBadge, avatarEl, loadMe, notify, timeAgo, onAuthState
 import { initStories } from "./stories.js";
 
   // Video uploads use a free Cloudinary account (see setup steps)
-  const CLOUD_NAME = "YOUR_CLOUD_NAME";
+  const CLOUD_NAME = "uvqtjbds";
   const UPLOAD_PRESET = "YOUR_UPLOAD_PRESET";
   let pendingVideo = "", pendingVideoUrl = "", uploading = false;
   function parseVideo(u) {
