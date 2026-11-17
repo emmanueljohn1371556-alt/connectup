@@ -5,7 +5,7 @@ import { initStories } from "./stories.js";
 
   // Video uploads use a free Cloudinary account (see setup steps)
   const CLOUD_NAME = "uvqtjbds";
-  const UPLOAD_PRESET = "YOUR_UPLOAD_PRESET";
+  const UPLOAD_PRESET = "User_Upload";
   let pendingVideo = "", pendingVideoUrl = "", uploading = false;
   function parseVideo(u) {
     u = (u || "").trim();
