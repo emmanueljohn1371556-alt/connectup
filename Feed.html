@@ -86,6 +86,14 @@
   <main>
     <div id="stories" class="stories"></div>
     <input id="storyFile" type="file" accept="image/*" hidden>
+    <div class="card" id="wa" style="display:none;position:relative">
+      <button id="waClose" aria-label="Close" style="position:absolute;top:6px;right:6px;background:none;border:none;color:var(--muted);padding:4px 10px;font-size:1.1rem">✕</button>
+      <div style="font-weight:600">Join our WhatsApp channel</div>
+      <div class="muted" style="margin:4px 0 10px">News, updates and new features from ConnectUp.</div>
+      <a href="https://whatsapp.com/channel/0029Vb8reEfG3R3jaTmcx72c" target="_blank" rel="noopener noreferrer"
+         style="display:inline-block;background:#25d366;color:#fff;text-decoration:none;padding:9px 16px;border-radius:8px;font-weight:600">Follow on WhatsApp</a>
+    </div>
+    <div class="card" id="onboard" style="display:none"></div>
     <div class="card">
       <textarea id="postText" maxlength="280" placeholder="What's on your mind?"></textarea>
       <img id="preview" class="postimg" alt="" style="display:none">

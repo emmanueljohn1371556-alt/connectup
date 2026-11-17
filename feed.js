@@ -106,6 +106,12 @@ import { initStories } from "./stories.js";
       img.src = url;
     });
   }
+  (function () {
+    const wa = $("wa");
+    try { if (wa && !localStorage.getItem("waDismissed")) wa.style.display = "block"; } catch (e) {}
+    if ($("waClose")) $("waClose").onclick = () => { wa.style.display = "none"; try { localStorage.setItem("waDismissed", "1"); } catch (e) {} };
+  })();
+
   $("photoBtn").onclick = () => $("photoFile").click();
   $("photoFile").onchange = async () => {
     const f = $("photoFile").files[0];
@@ -259,7 +265,19 @@ import { initStories } from "./stories.js";
       v.poster = p.videoUrl.replace(/\.[A-Za-z0-9]+$/, ".jpg");
       card.appendChild(v);
     }
-    card.append(likeBtn, cBtn);
+    const shBtn = document.createElement("button");
+    shBtn.className = "pill";
+    shBtn.textContent = "↗ Share";
+    shBtn.onclick = () => {
+      if (!window.shareSheet) { alert("Sharing is not ready yet. Please reload the page."); return; }
+      window.shareSheet({
+        title: "ConnectUp",
+        text: (p.text ? p.text.slice(0, 120) + " - " : "") + "on ConnectUp",
+        url: new URL("index.html", location.href).href,
+        image: p.image || ""
+      });
+    };
+    card.append(likeBtn, cBtn, shBtn);
     if (p.uid !== me.uid) {
       const rep = document.createElement("button");
       rep.className = "del"; rep.textContent = "Report";
@@ -285,6 +303,97 @@ import { initStories } from "./stories.js";
     }
     if (openPosts.has(id)) { cBox = buildComments(id, p.uid); card.appendChild(cBox); }
     return card;
+  }
+
+
+  // ---------- Welcome checklist ----------
+  let obHasPost = false, obHasGroup = false, obFirst = true, obCelebrate = false;
+  const obReady = { post: false, group: false, follow: false };
+
+  function initOnboarding() {
+    onSnapshot(query(collection(db, "posts"), where("uid", "==", me.uid), limit(1)), (sn) => {
+      obHasPost = !sn.empty; obReady.post = true; renderOnboard();
+    }, () => { obReady.post = true; renderOnboard(); });
+    onSnapshot(query(collection(db, "groups"), where("members", "array-contains", me.uid), limit(1)), (sn) => {
+      obHasGroup = !sn.empty; obReady.group = true; renderOnboard();
+    }, () => { obReady.group = true; renderOnboard(); });
+  }
+
+  function renderOnboard() {
+    const box = $("onboard");
+    if (!box || !me) return;
+    if (!(obReady.post && obReady.group && obReady.follow)) return;
+
+    let dismissed = false, doneFlag = false;
+    try { dismissed = !!localStorage.getItem("onboardDismissed"); doneFlag = !!localStorage.getItem("onboardDone"); } catch (e) {}
+
+    const steps = [
+      { label: "Add a profile photo", ok: !!me.avatar, btn: "Add", go: () => { window.location.href = "Home.html"; } },
+      { label: "Follow 3 people", ok: followIds.length >= 3, btn: "Find", go: () => { window.location.href = "Search.html"; } },
+      { label: "Write your first post", ok: obHasPost, btn: "Post", go: () => { $("postText").focus(); $("postText").scrollIntoView({ behavior: "smooth", block: "center" }); } },
+      { label: "Join a group", ok: obHasGroup, btn: "Join", go: () => { window.location.href = "Groups.html"; } }
+    ];
+    const n = steps.filter((x) => x.ok).length;
+    const all = n === steps.length;
+
+    // People who already finished everything never see the card
+    if (obFirst) {
+      obFirst = false;
+      if (all) { try { localStorage.setItem("onboardDone", "1"); } catch (e) {} box.style.display = "none"; return; }
+    }
+    if (dismissed) { box.style.display = "none"; return; }
+    if (all && !obCelebrate) {
+      if (doneFlag) { box.style.display = "none"; return; }
+      obCelebrate = true;
+      try { localStorage.setItem("onboardDone", "1"); } catch (e) {}
+    }
+
+    box.innerHTML = "";
+    box.style.display = "block";
+
+    const head = document.createElement("div");
+    head.style.cssText = "display:flex;justify-content:space-between;align-items:center";
+    const title = document.createElement("div");
+    title.style.fontWeight = "600";
+    title.textContent = all ? "You're all set! 🎉" : "Get started · " + n + " of " + steps.length;
+    const x = document.createElement("button");
+    x.textContent = "✕"; x.setAttribute("aria-label", "Close");
+    x.style.cssText = "background:none;border:none;color:var(--muted);padding:2px 8px;font-size:1.1rem";
+    x.onclick = () => { try { localStorage.setItem("onboardDismissed", "1"); } catch (e) {} box.style.display = "none"; };
+    head.append(title, x);
+
+    const bar = document.createElement("div");
+    bar.style.cssText = "height:6px;border-radius:3px;background:var(--border);margin:10px 0 6px;overflow:hidden";
+    const fill = document.createElement("div");
+    fill.style.cssText = "height:100%;background:var(--accent);width:" + Math.round((n / steps.length) * 100) + "%";
+    bar.appendChild(fill);
+    box.append(head, bar);
+
+    if (all) {
+      const m = document.createElement("div");
+      m.className = "muted"; m.textContent = "Great start. Invite friends from Profile to make ConnectUp more fun.";
+      box.appendChild(m);
+      return;
+    }
+    steps.forEach((st) => {
+      const row = document.createElement("div");
+      row.style.cssText = "display:flex;align-items:center;gap:10px;padding:7px 0";
+      const dot = document.createElement("span");
+      dot.textContent = st.ok ? "✓" : "○";
+      dot.style.cssText = "width:22px;text-align:center;font-weight:700;color:" + (st.ok ? "var(--accent)" : "var(--muted)");
+      const lab = document.createElement("span");
+      lab.className = "grow"; lab.textContent = st.label;
+      if (st.ok) lab.style.cssText = "flex:1;color:var(--muted);text-decoration:line-through";
+      else lab.style.flex = "1";
+      row.append(dot, lab);
+      if (!st.ok) {
+        const b = document.createElement("button");
+        b.className = "ghost"; b.textContent = st.btn; b.style.padding = "5px 14px";
+        b.onclick = st.go;
+        row.appendChild(b);
+      }
+      box.appendChild(row);
+    });
   }
 
   let lastDocs = [], ads = [], premiumSet = new Set();
@@ -356,6 +465,7 @@ import { initStories } from "./stories.js";
     setTimeout(() => { if (!gotData) $("status").textContent = "Still connecting to the database…"; }, 8000);
     onSnapshot(query(collection(db, "follows"), where("follower", "==", me.uid)), (s) => {
       followIds = s.docs.map((d) => d.data().following);
+      obReady.follow = true; renderOnboard();
       if (mode === "following") subscribePosts();
     }, () => {});
     onSnapshot(collection(db, "premium"), (sn) => {
@@ -384,7 +494,7 @@ import { initStories } from "./stories.js";
     watchBadge(user.uid);
     $("loading").style.display = "none";
     $("app").style.display = "block";
-    if (!started) { started = true; startFeed(); initStories(me, fileToImage); }
+    if (!started) { started = true; startFeed(); initStories(me, fileToImage); initOnboarding(); }
   });
 
   $("postText").addEventListener("input", () => {
@@ -398,10 +508,14 @@ import { initStories } from "./stories.js";
     if (!text && !pendingImage && !pendingVideo && !pendingVideoUrl) { $("status").textContent = "Write something or add a photo first."; return; }
     $("postBtn").disabled = true;
     try {
-      await addDoc(collection(db, "posts"), {
+      const post = {
         uid: me.uid, name: me.name, username: me.username,
-        avatar: me.avatar || "", text, image: pendingImage || "", video: pendingVideo || "", videoUrl: pendingVideoUrl || "", likedBy: [], createdAt: Date.now()
-      });
+        avatar: me.avatar || "", text, likedBy: [], createdAt: Date.now()
+      };
+      if (pendingImage) post.image = pendingImage;
+      if (pendingVideo) post.video = pendingVideo;
+      if (pendingVideoUrl) post.videoUrl = pendingVideoUrl;
+      await addDoc(collection(db, "posts"), post);
       pendingVideo = ""; pendingVideoUrl = ""; $("videoChip").style.display = "none";
       pendingImage = "";
       $("preview").style.display = "none";
